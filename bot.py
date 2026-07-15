@@ -42,41 +42,41 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     welcome_text = (
         f"👋 Hello {user.first_name}!\n\n"
-        "I'm a **Gist Bot** that creates GitHub Gists directly from Telegram.\n\n"
-        "📝 **How to use:**\n"
+        "I'm a <b>Gist Bot</b> that creates GitHub Gists directly from Telegram.\n\n"
+        "📝 <b>How to use:</b>\n"
         "1. Send me any text message or code snippet\n"
         "2. I'll create a Gist with your content\n"
         "3. You'll receive the Gist URL\n\n"
-        "🔧 **Commands:**\n"
+        "🔧 <b>Commands:</b>\n"
         "/start - Show this message\n"
         "/help - Get detailed help\n"
         "/gist - Create a Gist with custom filename\n"
         "/setdescription - Set description for your Gist\n"
-        "/public - Make Gists public (default is secret)\n"
+        "/public - Make Gists public\n"
         "/private - Make Gists private/secret\n"
         "/status - Check your current settings\n\n"
-        "💡 **Example:** `/gist main.py print('Hello World!')`"
+        "💡 <b>Example:</b> <code>/gist main.py print('Hello World!')</code>"
     )
-    await update.message.reply_text(welcome_text, parse_mode="Markdown")
+    await update.message.reply_text(welcome_text, parse_mode="HTML")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     help_text = (
-        "📚 **Help & Commands**\n\n"
-        "**Create a Gist:**\n"
+        "📚 <b>Help &amp; Commands</b>\n\n"
+        "<b>Create a Gist:</b>\n"
         "• Simply send any text message\n"
-        "• Or use: `/gist filename content`\n\n"
-        "**Examples:**\n"
-        "`/gist hello.py print('Hello World!')`\n"
-        "`/gist style.css .container { display: flex; }`\n\n"
-        "**Set Description:**\n"
-        "`/setdescription My awesome code`\n\n"
-        "**Toggle Privacy:**\n"
+        "• Or use: <code>/gist filename content</code>\n\n"
+        "<b>Examples:</b>\n"
+        "<code>/gist hello.py print('Hello World!')</code>\n"
+        "<code>/gist style.css .container { display: flex; }</code>\n\n"
+        "<b>Set Description:</b>\n"
+        "<code>/setdescription My awesome code</code>\n\n"
+        "<b>Toggle Privacy:</b>\n"
         "/public - Make Gists public\n"
         "/private - Make Gists private (default)\n\n"
-        "**Check Status:**\n"
+        "<b>Check Status:</b>\n"
         "/status - View current settings"
     )
-    await update.message.reply_text(help_text, parse_mode="Markdown")
+    await update.message.reply_text(help_text, parse_mode="HTML")
 
 async def set_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
@@ -84,7 +84,7 @@ async def set_description(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not description:
         await update.message.reply_text(
             "❌ Please provide a description.\n"
-            "Example: `/setdescription My awesome Python script`"
+            "Example: /setdescription My awesome Python script"
         )
         return
     if user_id not in user_sessions:
@@ -97,14 +97,14 @@ async def set_public(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if user_id not in user_sessions:
         user_sessions[user_id] = {}
     user_sessions[user_id]['public'] = True
-    await update.message.reply_text("🌍 Gists will now be **PUBLIC**", parse_mode="Markdown")
+    await update.message.reply_text("🌍 Gists will now be <b>PUBLIC</b>", parse_mode="HTML")
 
 async def set_private(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     if user_id not in user_sessions:
         user_sessions[user_id] = {}
     user_sessions[user_id]['public'] = False
-    await update.message.reply_text("🔒 Gists will now be **PRIVATE/SECRET**", parse_mode="Markdown")
+    await update.message.reply_text("🔒 Gists will now be <b>PRIVATE/SECRET</b>", parse_mode="HTML")
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
@@ -112,15 +112,15 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     description = session.get('description', 'Not set (using default)')
     visibility = "Public" if session.get('public', False) else "Private/Secret"
     status_text = (
-        "📊 **Your Current Settings**\n\n"
-        f"📝 **Description:** {description}\n"
-        f"👁️ **Visibility:** {visibility}\n\n"
-        "🔧 **To change:**\n"
-        "• `/setdescription` - Change description\n"
-        "• `/public` - Make Gists public\n"
-        "• `/private` - Make Gists private"
+        "📊 <b>Your Current Settings</b>\n\n"
+        f"📝 <b>Description:</b> {description}\n"
+        f"👁️ <b>Visibility:</b> {visibility}\n\n"
+        "🔧 <b>To change:</b>\n"
+        "• /setdescription - Change description\n"
+        "• /public - Make Gists public\n"
+        "• /private - Make Gists private"
     )
-    await update.message.reply_text(status_text, parse_mode="Markdown")
+    await update.message.reply_text(status_text, parse_mode="HTML")
 
 async def gist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
@@ -128,14 +128,14 @@ async def gist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not text:
         await update.message.reply_text(
             "❌ Please provide filename and content.\n"
-            "Example: `/gist main.py print('Hello World!')`"
+            "Example: /gist main.py print('Hello World!')"
         )
         return
     parts = text.split(" ", 1)
     if len(parts) < 2:
         await update.message.reply_text(
             "❌ Please provide both filename and content.\n"
-            "Example: `/gist main.py print('Hello World!')`"
+            "Example: /gist main.py print('Hello World!')"
         )
         return
     filename = parts[0]
@@ -152,22 +152,20 @@ async def gist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             [InlineKeyboardButton("⚙️ Settings", callback_data="settings")]
         ]
         await update.message.reply_text(
-            f"✅ **Gist created successfully!**\n\n"
-            f"📂 **Filename:** `{filename}`\n"
-            f"📝 **Description:** {description}\n"
-            f"👁️ **Visibility:** {'Public' if public else 'Private'}\n\n"
-            f"🔗 **URL:** {result}\n\n"
-            f"📊 **Stats:**\n"
+            f"✅ <b>Gist created successfully!</b>\n\n"
+            f"📂 <b>Filename:</b> <code>{filename}</code>\n"
+            f"📝 <b>Description:</b> {description}\n"
+            f"👁️ <b>Visibility:</b> {'Public' if public else 'Private'}\n\n"
+            f"🔗 <b>URL:</b> {result}\n\n"
+            f"📊 <b>Stats:</b>\n"
             f"• Lines: {len(content.splitlines())}\n"
             f"• Characters: {len(content)}\n"
             f"• Size: {len(content.encode('utf-8'))} bytes",
-            parse_mode="Markdown",
+            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
         await update.message.reply_text(f"❌ Failed to create Gist: {result}")
-
-# ============ MESSAGE HANDLER ============
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
@@ -187,35 +185,33 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             [InlineKeyboardButton("⚙️ Settings", callback_data="settings")]
         ]
         await update.message.reply_text(
-            f"✅ **Gist created successfully!**\n\n"
-            f"📂 **Filename:** `{filename}`\n"
-            f"📝 **Description:** {description}\n"
-            f"👁️ **Visibility:** {'Public' if public else 'Private'}\n\n"
-            f"🔗 **URL:** {result}\n\n"
-            f"📊 **Stats:**\n"
+            f"✅ <b>Gist created successfully!</b>\n\n"
+            f"📂 <b>Filename:</b> <code>{filename}</code>\n"
+            f"📝 <b>Description:</b> {description}\n"
+            f"👁️ <b>Visibility:</b> {'Public' if public else 'Private'}\n\n"
+            f"🔗 <b>URL:</b> {result}\n\n"
+            f"📊 <b>Stats:</b>\n"
             f"• Lines: {len(text.splitlines())}\n"
             f"• Characters: {len(text)}\n"
             f"• Size: {len(text.encode('utf-8'))} bytes",
-            parse_mode="Markdown",
+            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
         await update.message.reply_text(f"❌ Failed to create Gist: {result}")
-
-# ============ CALLBACK HANDLER ============
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     if query.data == "new_gist":
         await query.edit_message_text(
-            "📝 **Create a New Gist**\n\n"
+            "📝 <b>Create a New Gist</b>\n\n"
             "Send me any text message or code snippet!\n\n"
             "You can also use:\n"
-            "• `/gist filename content` - Create with specific filename\n"
-            "• `/setdescription` - Set a description\n"
-            "• `/status` - Check your current settings",
-            parse_mode="Markdown"
+            "• <code>/gist filename content</code> - Create with specific filename\n"
+            "• /setdescription - Set a description\n"
+            "• /status - Check your current settings",
+            parse_mode="HTML"
         )
     elif query.data == "settings":
         user_id = update.effective_user.id
@@ -223,14 +219,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         description = session.get('description', 'Not set (using default)')
         visibility = "Public" if session.get('public', False) else "Private/Secret"
         await query.edit_message_text(
-            "⚙️ **Your Settings**\n\n"
-            f"📝 **Description:** {description}\n"
-            f"👁️ **Visibility:** {visibility}\n\n"
-            "🔧 **Quick Commands:**\n"
-            "• `/setdescription` - Change description\n"
-            "• `/public` - Make Gists public\n"
-            "• `/private` - Make Gists private",
-            parse_mode="Markdown"
+            "⚙️ <b>Your Settings</b>\n\n"
+            f"📝 <b>Description:</b> {description}\n"
+            f"👁️ <b>Visibility:</b> {visibility}\n\n"
+            "🔧 <b>Quick Commands:</b>\n"
+            "• /setdescription - Change description\n"
+            "• /public - Make Gists public\n"
+            "• /private - Make Gists private",
+            parse_mode="HTML"
         )
 
 # ============ HELPER FUNCTIONS ============
@@ -273,8 +269,6 @@ def create_gist(filename, content, description, public=False):
         return False, f"Network error: {str(e)}"
     except Exception as e:
         return False, f"Unexpected error: {str(e)}"
-
-# ============ ERROR HANDLER ============
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error(f"Update {update} caused error {context.error}")
