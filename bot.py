@@ -1,280 +1,263 @@
+# ============ HIDE TOKEN FROM LOGS (MUST BE FIRST) ============
 import logging
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+# ============ IMPORTS ============
 import os
 import asyncio
 import threading
-import requests
+from datetime import datetime
+import pytz
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
-# Suppress httpx logs so token never shows in logs
-logging.getLogger("httpx").setLevel(logging.WARNING)
-
+# ============ LOGGING ============
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
+# ============ ENVIRONMENT VARIABLES ============
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-
 if not TOKEN:
     raise ValueError("❌ No TELEGRAM_BOT_TOKEN set!")
-if not GITHUB_TOKEN:
-    raise ValueError("❌ No GITHUB_TOKEN set!")
 
-GITHUB_API = "https://api.github.com/gists"
-user_sessions = {}
+# ============ WORLD CLOCKS ============
+COUNTRIES = {
+    "🇺🇸 USA (New York)": "America/New_York",
+    "🇺🇸 USA (Los Angeles)": "America/Los_Angeles",
+    "🇺🇸 USA (Chicago)": "America/Chicago",
+    "🇬🇧 UK (London)": "Europe/London",
+    "🇫🇷 France (Paris)": "Europe/Paris",
+    "🇩🇪 Germany (Berlin)": "Europe/Berlin",
+    "🇷🇺 Russia (Moscow)": "Europe/Moscow",
+    "🇦🇪 UAE (Dubai)": "Asia/Dubai",
+    "🇮🇳 India (Mumbai)": "Asia/Kolkata",
+    "🇨🇳 China (Beijing)": "Asia/Shanghai",
+    "🇯🇵 Japan (Tokyo)": "Asia/Tokyo",
+    "🇦🇺 Australia (Sydney)": "Australia/Sydney",
+    "🇧🇷 Brazil (São Paulo)": "America/Sao_Paulo",
+    "🇨🇦 Canada (Toronto)": "America/Toronto",
+    "🇿🇦 South Africa": "Africa/Johannesburg",
+    "🇳🇬 Nigeria (Lagos)": "Africa/Lagos",
+    "🇰🇪 Kenya (Nairobi)": "Africa/Nairobi",
+    "🇸🇬 Singapore": "Asia/Singapore",
+    "🇹🇷 Turkey (Istanbul)": "Europe/Istanbul",
+    "🇲🇽 Mexico (Mexico City)": "America/Mexico_City",
+}
 
-# ============================================================
-# 🌐 FLASK - Keeps Render alive
-# ============================================================
+def get_time(timezone):
+    tz = pytz.timezone(timezone)
+    now = datetime.now(tz)
+    return now.strftime("%I:%M %p"), now.strftime("%A, %B %d %Y")
+
+# ============ FLASK - KEEPS RENDER ALIVE ============
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def health_check():
-    return "🤖 Gist Bot is running!", 200
+    return "🌍 World Clock Bot is running!", 200
 
-# ============ COMMAND HANDLERS ============
+# ============ COMMANDS ============
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    welcome_text = (
-        f"👋 Hello {user.first_name}!\n\n"
-        "I'm a <b>Gist Bot</b> that creates GitHub Gists directly from Telegram.\n\n"
-        "📝 <b>How to use:</b>\n"
-        "1. Send me any text message or code snippet\n"
-        "2. I'll create a Gist with your content\n"
-        "3. You'll receive the Gist URL\n\n"
+    keyboard = [
+        [InlineKeyboardButton("🌍 Show All Times", callback_data="all_times")],
+        [InlineKeyboardButton("🇺🇸 USA", callback_data="usa"),
+         InlineKeyboardButton("🇬🇧 UK", callback_data="uk")],
+        [InlineKeyboardButton("🇦🇪 Dubai", callback_data="dubai"),
+         InlineKeyboardButton("🇮🇳 India", callback_data="india")],
+        [InlineKeyboardButton("🇯🇵 Japan", callback_data="japan"),
+         InlineKeyboardButton("🇦🇺 Australia", callback_data="australia")],
+        [InlineKeyboardButton("🇳🇬 Nigeria", callback_data="nigeria"),
+         InlineKeyboardButton("🇨🇳 China", callback_data="china")],
+    ]
+    await update.message.reply_text(
+        "🌍 <b>World Clock Bot</b>\n\n"
+        "Get the current time in any country!\n\n"
         "🔧 <b>Commands:</b>\n"
-        "/start - Show this message\n"
-        "/help - Get detailed help\n"
-        "/gist - Create a Gist with custom filename\n"
-        "/setdescription - Set description for your Gist\n"
-        "/public - Make Gists public\n"
-        "/private - Make Gists private/secret\n"
-        "/status - Check your current settings\n\n"
-        "💡 <b>Example:</b> <code>/gist main.py print('Hello World!')</code>"
+        "/time - Show all world times\n"
+        "/usa - USA time\n"
+        "/uk - UK time\n"
+        "/search [country] - Search any country\n"
+        "/help - Show help\n\n"
+        "Or tap a button below 👇",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    await update.message.reply_text(welcome_text, parse_mode="HTML")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    help_text = (
-        "📚 <b>Help &amp; Commands</b>\n\n"
-        "<b>Create a Gist:</b>\n"
-        "• Simply send any text message\n"
-        "• Or use: <code>/gist filename content</code>\n\n"
+    await update.message.reply_text(
+        "📚 <b>World Clock Bot Help</b>\n\n"
+        "<b>Commands:</b>\n"
+        "/time - Show all world times\n"
+        "/usa - Get USA times\n"
+        "/uk - Get UK time\n"
+        "/search Nigeria - Search a country\n\n"
         "<b>Examples:</b>\n"
-        "<code>/gist hello.py print('Hello World!')</code>\n"
-        "<code>/gist style.css .container { display: flex; }</code>\n\n"
-        "<b>Set Description:</b>\n"
-        "<code>/setdescription My awesome code</code>\n\n"
-        "<b>Toggle Privacy:</b>\n"
-        "/public - Make Gists public\n"
-        "/private - Make Gists private (default)\n\n"
-        "<b>Check Status:</b>\n"
-        "/status - View current settings"
+        "<code>/search Japan</code>\n"
+        "<code>/search Dubai</code>\n"
+        "<code>/search Brazil</code>\n\n"
+        "Or just send a country name directly!",
+        parse_mode="HTML"
     )
-    await update.message.reply_text(help_text, parse_mode="HTML")
 
-async def set_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    description = update.message.text.replace("/setdescription", "", 1).strip()
-    if not description:
-        await update.message.reply_text(
-            "❌ Please provide a description.\n"
-            "Example: /setdescription My awesome Python script"
-        )
-        return
-    if user_id not in user_sessions:
-        user_sessions[user_id] = {}
-    user_sessions[user_id]['description'] = description
-    await update.message.reply_text(f"✅ Description set to:\n\n📝 {description}")
+async def all_times(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text = "🌍 <b>World Clock</b>\n\n"
+    for country, timezone in COUNTRIES.items():
+        time, _ = get_time(timezone)
+        text += f"{country}: <b>{time}</b>\n"
+    await update.message.reply_text(text, parse_mode="HTML")
 
-async def set_public(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    if user_id not in user_sessions:
-        user_sessions[user_id] = {}
-    user_sessions[user_id]['public'] = True
-    await update.message.reply_text("🌍 Gists will now be <b>PUBLIC</b>", parse_mode="HTML")
-
-async def set_private(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    if user_id not in user_sessions:
-        user_sessions[user_id] = {}
-    user_sessions[user_id]['public'] = False
-    await update.message.reply_text("🔒 Gists will now be <b>PRIVATE/SECRET</b>", parse_mode="HTML")
-
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    session = user_sessions.get(user_id, {})
-    description = session.get('description', 'Not set (using default)')
-    visibility = "Public" if session.get('public', False) else "Private/Secret"
-    status_text = (
-        "📊 <b>Your Current Settings</b>\n\n"
-        f"📝 <b>Description:</b> {description}\n"
-        f"👁️ <b>Visibility:</b> {visibility}\n\n"
-        "🔧 <b>To change:</b>\n"
-        "• /setdescription - Change description\n"
-        "• /public - Make Gists public\n"
-        "• /private - Make Gists private"
+async def usa_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    ny_time, ny_date = get_time("America/New_York")
+    la_time, _ = get_time("America/Los_Angeles")
+    ch_time, _ = get_time("America/Chicago")
+    await update.message.reply_text(
+        f"🇺🇸 <b>USA Times</b>\n\n"
+        f"📅 {ny_date}\n\n"
+        f"🗽 New York (EST): <b>{ny_time}</b>\n"
+        f"🎬 Los Angeles (PST): <b>{la_time}</b>\n"
+        f"🌆 Chicago (CST): <b>{ch_time}</b>",
+        parse_mode="HTML"
     )
-    await update.message.reply_text(status_text, parse_mode="HTML")
 
-async def gist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    text = update.message.text.replace("/gist", "", 1).strip()
-    if not text:
+async def uk_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    time, date = get_time("Europe/London")
+    await update.message.reply_text(
+        f"🇬🇧 <b>UK Time</b>\n\n"
+        f"📅 {date}\n"
+        f"🕐 London: <b>{time}</b>",
+        parse_mode="HTML"
+    )
+
+async def search_country(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = " ".join(context.args).strip().lower() if context.args else ""
+    if not query:
         await update.message.reply_text(
-            "❌ Please provide filename and content.\n"
-            "Example: /gist main.py print('Hello World!')"
+            "❌ Please provide a country name.\n"
+            "Example: <code>/search Japan</code>",
+            parse_mode="HTML"
         )
         return
-    parts = text.split(" ", 1)
-    if len(parts) < 2:
+    results = {k: v for k, v in COUNTRIES.items() if query in k.lower()}
+    if not results:
         await update.message.reply_text(
-            "❌ Please provide both filename and content.\n"
-            "Example: /gist main.py print('Hello World!')"
+            f"❌ No results for <b>{query}</b>\n\n"
+            "Try: USA, UK, Japan, Dubai, Nigeria, India, China, Australia...",
+            parse_mode="HTML"
         )
         return
-    filename = parts[0]
-    content = parts[1]
-    await update.message.chat.send_action(action="typing")
-    session = user_sessions.get(user_id, {})
-    description = session.get('description', f'Gist from Telegram by {update.effective_user.username or "User"}')
-    public = session.get('public', False)
-    success, result = create_gist(filename, content, description, public)
-    if success:
-        keyboard = [
-            [InlineKeyboardButton("🔗 Open Gist", url=result)],
-            [InlineKeyboardButton("📝 New Gist", callback_data="new_gist")],
-            [InlineKeyboardButton("⚙️ Settings", callback_data="settings")]
-        ]
-        await update.message.reply_text(
-            f"✅ <b>Gist created successfully!</b>\n\n"
-            f"📂 <b>Filename:</b> <code>{filename}</code>\n"
-            f"📝 <b>Description:</b> {description}\n"
-            f"👁️ <b>Visibility:</b> {'Public' if public else 'Private'}\n\n"
-            f"🔗 <b>URL:</b> {result}\n\n"
-            f"📊 <b>Stats:</b>\n"
-            f"• Lines: {len(content.splitlines())}\n"
-            f"• Characters: {len(content)}\n"
-            f"• Size: {len(content.encode('utf-8'))} bytes",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    else:
-        await update.message.reply_text(f"❌ Failed to create Gist: {result}")
+    text = f"🔍 <b>Results for '{query}':</b>\n\n"
+    for country, timezone in results.items():
+        time, date = get_time(timezone)
+        text += f"{country}\n📅 {date}\n🕐 <b>{time}</b>\n\n"
+    await update.message.reply_text(text, parse_mode="HTML")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    text = update.message.text
-    if text.startswith('/'):
-        return
-    await update.message.chat.send_action(action="typing")
-    session = user_sessions.get(user_id, {})
-    description = session.get('description', f'Gist from Telegram by {update.effective_user.username or "User"}')
-    public = session.get('public', False)
-    filename = detect_filename(text)
-    success, result = create_gist(filename, text, description, public)
-    if success:
-        keyboard = [
-            [InlineKeyboardButton("🔗 Open Gist", url=result)],
-            [InlineKeyboardButton("📝 New Gist", callback_data="new_gist")],
-            [InlineKeyboardButton("⚙️ Settings", callback_data="settings")]
-        ]
-        await update.message.reply_text(
-            f"✅ <b>Gist created successfully!</b>\n\n"
-            f"📂 <b>Filename:</b> <code>{filename}</code>\n"
-            f"📝 <b>Description:</b> {description}\n"
-            f"👁️ <b>Visibility:</b> {'Public' if public else 'Private'}\n\n"
-            f"🔗 <b>URL:</b> {result}\n\n"
-            f"📊 <b>Stats:</b>\n"
-            f"• Lines: {len(text.splitlines())}\n"
-            f"• Characters: {len(text)}\n"
-            f"• Size: {len(text.encode('utf-8'))} bytes",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+    query = update.message.text.strip().lower()
+    results = {k: v for k, v in COUNTRIES.items() if query in k.lower()}
+    if results:
+        text = f"🔍 <b>Results for '{query}':</b>\n\n"
+        for country, timezone in results.items():
+            time, date = get_time(timezone)
+            text += f"{country}\n📅 {date}\n🕐 <b>{time}</b>\n\n"
+        await update.message.reply_text(text, parse_mode="HTML")
     else:
-        await update.message.reply_text(f"❌ Failed to create Gist: {result}")
+        await update.message.reply_text(
+            f"❌ No results for <b>{query}</b>\n\n"
+            "Try: USA, UK, Japan, Dubai, Nigeria, India...\n\n"
+            "Or use /time to see all countries",
+            parse_mode="HTML"
+        )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    if query.data == "new_gist":
+
+    if query.data == "all_times":
+        text = "🌍 <b>World Clock</b>\n\n"
+        for country, timezone in COUNTRIES.items():
+            time, _ = get_time(timezone)
+            text += f"{country}: <b>{time}</b>\n"
+        await query.edit_message_text(text, parse_mode="HTML")
+
+    elif query.data == "usa":
+        ny_time, ny_date = get_time("America/New_York")
+        la_time, _ = get_time("America/Los_Angeles")
+        ch_time, _ = get_time("America/Chicago")
         await query.edit_message_text(
-            "📝 <b>Create a New Gist</b>\n\n"
-            "Send me any text message or code snippet!\n\n"
-            "You can also use:\n"
-            "• <code>/gist filename content</code> - Create with specific filename\n"
-            "• /setdescription - Set a description\n"
-            "• /status - Check your current settings",
-            parse_mode="HTML"
-        )
-    elif query.data == "settings":
-        user_id = update.effective_user.id
-        session = user_sessions.get(user_id, {})
-        description = session.get('description', 'Not set (using default)')
-        visibility = "Public" if session.get('public', False) else "Private/Secret"
-        await query.edit_message_text(
-            "⚙️ <b>Your Settings</b>\n\n"
-            f"📝 <b>Description:</b> {description}\n"
-            f"👁️ <b>Visibility:</b> {visibility}\n\n"
-            "🔧 <b>Quick Commands:</b>\n"
-            "• /setdescription - Change description\n"
-            "• /public - Make Gists public\n"
-            "• /private - Make Gists private",
+            f"🇺🇸 <b>USA Times</b>\n\n"
+            f"📅 {ny_date}\n\n"
+            f"🗽 New York: <b>{ny_time}</b>\n"
+            f"🎬 Los Angeles: <b>{la_time}</b>\n"
+            f"🌆 Chicago: <b>{ch_time}</b>",
             parse_mode="HTML"
         )
 
-# ============ HELPER FUNCTIONS ============
+    elif query.data == "uk":
+        time, date = get_time("Europe/London")
+        await query.edit_message_text(
+            f"🇬🇧 <b>UK Time</b>\n\n"
+            f"📅 {date}\n🕐 London: <b>{time}</b>",
+            parse_mode="HTML"
+        )
 
-def detect_filename(content):
-    if 'import' in content or 'def ' in content or 'class ' in content:
-        return 'main.py' if 'def main' in content else 'code.py'
-    elif 'SELECT' in content.upper() or 'INSERT' in content.upper():
-        return 'query.sql'
-    elif '<html' in content.lower() or '<div' in content.lower():
-        return 'index.html'
-    elif '{' in content and '}' in content:
-        return 'config.json' if ':' in content else 'style.css'
-    return 'gist.txt'
+    elif query.data == "dubai":
+        time, date = get_time("Asia/Dubai")
+        await query.edit_message_text(
+            f"🇦🇪 <b>Dubai Time</b>\n\n"
+            f"📅 {date}\n🕐 Dubai: <b>{time}</b>",
+            parse_mode="HTML"
+        )
 
-def create_gist(filename, content, description, public=False):
-    try:
-        payload = {
-            "description": description,
-            "public": public,
-            "files": {filename: {"content": content}}
-        }
-        headers = {
-            "Authorization": f"token {GITHUB_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        response = requests.post(GITHUB_API, json=payload, headers=headers)
-        if response.status_code == 201:
-            return True, response.json()['html_url']
-        else:
-            error_msg = f"GitHub API error: {response.status_code}"
-            try:
-                error_data = response.json()
-                if 'message' in error_data:
-                    error_msg += f" - {error_data['message']}"
-            except:
-                pass
-            return False, error_msg
-    except requests.exceptions.RequestException as e:
-        return False, f"Network error: {str(e)}"
-    except Exception as e:
-        return False, f"Unexpected error: {str(e)}"
+    elif query.data == "india":
+        time, date = get_time("Asia/Kolkata")
+        await query.edit_message_text(
+            f"🇮🇳 <b>India Time</b>\n\n"
+            f"📅 {date}\n🕐 Mumbai: <b>{time}</b>",
+            parse_mode="HTML"
+        )
+
+    elif query.data == "japan":
+        time, date = get_time("Asia/Tokyo")
+        await query.edit_message_text(
+            f"🇯🇵 <b>Japan Time</b>\n\n"
+            f"📅 {date}\n🕐 Tokyo: <b>{time}</b>",
+            parse_mode="HTML"
+        )
+
+    elif query.data == "australia":
+        time, date = get_time("Australia/Sydney")
+        await query.edit_message_text(
+            f"🇦🇺 <b>Australia Time</b>\n\n"
+            f"📅 {date}\n🕐 Sydney: <b>{time}</b>",
+            parse_mode="HTML"
+        )
+
+    elif query.data == "nigeria":
+        time, date = get_time("Africa/Lagos")
+        await query.edit_message_text(
+            f"🇳🇬 <b>Nigeria Time</b>\n\n"
+            f"📅 {date}\n🕐 Lagos: <b>{time}</b>",
+            parse_mode="HTML"
+        )
+
+    elif query.data == "china":
+        time, date = get_time("Asia/Shanghai")
+        await query.edit_message_text(
+            f"🇨🇳 <b>China Time</b>\n\n"
+            f"📅 {date}\n🕐 Beijing: <b>{time}</b>",
+            parse_mode="HTML"
+        )
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error(f"Update {update} caused error {context.error}")
     try:
         if update and update.effective_message:
-            await update.effective_message.reply_text("❌ An error occurred. Please try again later.")
+            await update.effective_message.reply_text("❌ An error occurred. Please try again.")
     except:
         pass
 
@@ -286,11 +269,10 @@ async def run_bot_async():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("gist", gist_command))
-    app.add_handler(CommandHandler("setdescription", set_description))
-    app.add_handler(CommandHandler("public", set_public))
-    app.add_handler(CommandHandler("private", set_private))
-    app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("time", all_times))
+    app.add_handler(CommandHandler("usa", usa_time))
+    app.add_handler(CommandHandler("uk", uk_time))
+    app.add_handler(CommandHandler("search", search_country))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_error_handler(error_handler)
@@ -302,7 +284,7 @@ async def run_bot_async():
         drop_pending_updates=True
     )
 
-    logger.info("✅ Gist Bot is polling and ready!")
+    logger.info("✅ World Clock Bot is polling and ready!")
 
     while True:
         await asyncio.sleep(1)
@@ -312,6 +294,5 @@ def run_bot():
     asyncio.set_event_loop(loop)
     loop.run_until_complete(run_bot_async())
 
-# Start bot thread when Gunicorn loads
 bot_thread = threading.Thread(target=run_bot, daemon=True)
 bot_thread.start()
